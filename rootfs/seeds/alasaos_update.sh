@@ -6,28 +6,28 @@
 # deploy.yaml 里 ALAS 内置更新器已被 AutoUpdate:false 锁死，
 # 本脚本是设备上唯一的 ALAS 更新通道。
 #
-# 双通道（2026-09-18 起，按优先级）：
+# 更新机制：
+#   默认对齐 Fork 仓库（https://github.com/shi0tsuki/ALAS-AOS）维护的热更分支（alas-update），
+#   由 upstream-sync 工作流定期从上游拉取并合入安卓补丁。
+#   在更新拉取并 reset 后，由脚本重放本地补丁（seeds/assets_fix.py），
+#   App 侧在收到 UPDATED 后亦会重铺 AlasOverlay 并重跑 assets_fix，形成双重保障。
+#
+# 多通道（按优先级）：
 #   1. CDN pack（seeds/cdn_update.py，复刻上游 git_over_cdn 协议）：
-#      latest.json(3s) → 有更新才下 {latest}/{current}.zip 增量 pack（仅 ~400KB，
-#      git 浅树的零头），落 .git/objects/pack + refs 后统一 reset --hard。
-#      404/403（无此增量包）或 CDN 不可达 → 回落通道 2。
-#   2. git://git.lyoko.io（9418 裸 TCP，运营商限速下 fetch 曾连续烧满 240s 超时，
-#      只作兜底）：ls-remote(60s) 比对 → 需要才 fetch --depth(240s)。
+#      仅 CN 官方/镜像源生效。
+#   2. git 兜底（支持 Fork 仓库 HTTPS 及 git://）：
+#      ls-remote(60s) 比对 → 需要才 fetch --depth(240s)。
 #
 # 失败退避：两通道都失败 → 记当天日期到 $FAIL_FILE，当天后续启动直接跳过
 # （弱网/镜像抽风时开机不再每天烧 N 次 4 分钟）；次日自动恢复检查。
-#
-# 补丁重放不在本脚本职责内：git reset 会把上游跟踪文件打回原版，
-# App 侧在收到 UPDATED 后重放 assets/alas（patches/module、patches/assets、
-# overlays/rpc.py）并重跑 assets_fix.py。
 #
 # 与 App 的协议：最后一行打印三态之一，UPDATED/UNCHANGED 退出码 0，FAILED 退出码 1。
 # FAILED（断网/超时/镜像不可达）由 App 降级为"跳过更新"，不阻塞启动。
 #
 # 环境变量（均可 export 覆盖，冒号后为默认值）：
 #   ALASAOS_ALAS_ROOT      /opt/alas
-#   ALASAOS_UPDATE_REPO    git://git.lyoko.io/AzurLaneAutoScript
-#   ALASAOS_UPDATE_BRANCH  master
+#   ALASAOS_UPDATE_REPO    https://github.com/shi0tsuki/ALAS-AOS
+#   ALASAOS_UPDATE_BRANCH  alas-update（Fork 仓库默认）/ master（上游原镜像默认）
 #   ALASAOS_UPDATE_DEPTH   50
 #   ALASAOS_UPDATE_TIMEOUT 240（秒；首次 fetch 需整棵浅树，弱网可调大）
 #   ALASAOS_UPDATE_NO_CDN  置非空则跳过 CDN 通道（排障用；GitHub 镜像档恒置）
@@ -39,12 +39,27 @@
 set -uo pipefail
 
 ALAS_DIR="${ALASAOS_ALAS_ROOT:-/opt/alas}"
-REPO="${ALASAOS_UPDATE_REPO:-git://git.lyoko.io/AzurLaneAutoScript}"
-BRANCH="${ALASAOS_UPDATE_BRANCH:-master}"
+REPO="${ALASAOS_UPDATE_REPO:-https://github.com/shi0tsuki/ALAS-AOS}"
+if [[ -n "${ALASAOS_UPDATE_BRANCH:-}" ]]; then
+  BRANCH="$ALASAOS_UPDATE_BRANCH"
+elif [[ "$REPO" == *"shi0tsuki/ALAS-AOS"* ]]; then
+  BRANCH="alas-update"
+else
+  BRANCH="master"
+fi
 DEPTH="${ALASAOS_UPDATE_DEPTH:-50}"
 TIMEOUT="${ALASAOS_UPDATE_TIMEOUT:-240}"
 STATE_FILE="$ALAS_DIR/.alasaos_alas_commit"
 FAIL_FILE="$ALAS_DIR/.alasaos_update_fail_date"
+
+# 本地补丁重放：在 reset 打回代码后确保本地必需的补丁重放（如 assets_fix），
+# App 侧在收到 UPDATED 后也会重铺 AlasOverlay 并重跑 assets_fix，形成双重保障。
+replay_local_patches() {
+  echo "replaying local patches..."
+  if [[ -f "$ALAS_DIR/seeds/assets_fix.py" ]]; then
+    python3 "$ALAS_DIR/seeds/assets_fix.py" "$ALAS_DIR" 2>&1 | sed 's/^/  patch| /' || true
+  fi
+}
 
 # 系统 HTTP 代理（GitHub 档下 App 侧注入；VPN fake-ip 劫持下直连 TCP 被秒拒，
 # git/curl 均认 http_proxy/https_proxy，全程生效——不止 force-full）
@@ -120,6 +135,7 @@ if [[ -n "${ALASAOS_UPDATE_FORCE_FULL:-}" && -n "${ALASAOS_UPDATE_NO_CDN:-}" ]];
     find .git -name '*.lock' -delete 2>/dev/null
     if git_repository_init; then
       new="$(git rev-parse HEAD)"
+      replay_local_patches
       echo "$new" > "$STATE_FILE"
       rm -f "$FAIL_FILE"
       echo "UPDATED $new (force-full)"
@@ -143,13 +159,16 @@ fi
 if [[ ! -d .git ]]; then
   git init -q . || fail "git init"
   git remote add origin "$REPO" || fail "git remote add"
+else
+  git remote set-url origin "$REPO" 2>/dev/null || git remote add origin "$REPO" || fail "git remote set-url"
 fi
 
 # 上次被杀的 fetch/reset 可能留锁（App 侧启动清理也会扫一遍，这里双保险）
 find .git -name '*.lock' -delete 2>/dev/null
 
 # ---------- 通道 1：CDN pack ----------
-if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" ]]; then
+# GitHub 仓库或显式指定 NO_CDN 时跳过
+if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" && "$REPO" != *"github.com"* ]]; then
   if [[ -n "$current" ]] && ! git cat-file -e "$current^{commit}" 2>/dev/null; then
     # .git 被 force-full 推倒重建过/对象不全：CDN 增量包无基可打，直走 git:// 重建
     echo "  cdn| 本地缺 current 对象（${current:-none} 不在库），跳过 CDN"
@@ -165,6 +184,7 @@ if [[ -z "${ALASAOS_UPDATE_NO_CDN:-}" ]]; then
     new="${cdn_last#PACK_READY }"
     # reset 失败（对象不全）不终局，落回 git:// 通道重建
     if git reset --hard origin/"$BRANCH"; then
+      replay_local_patches
       echo "$new" > "$STATE_FILE"
       rm -f "$FAIL_FILE"
       echo "UPDATED $new (cdn)"
@@ -203,6 +223,7 @@ if [[ "$new" == "$current" ]]; then
 fi
 
 git reset --hard FETCH_HEAD || fail "reset --hard $new"
+replay_local_patches
 echo "$new" > "$STATE_FILE"
 rm -f "$FAIL_FILE"
 echo "UPDATED $new"
