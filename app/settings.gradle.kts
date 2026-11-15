@@ -49,14 +49,32 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        maven {
-            name = "AliyunGoogle"
-            url = uri("https://maven.aliyun.com/repository/google")
+        val isCi = System.getenv("CI") == "true"
+        if (!isCi) {
+            maven {
+                name = "AliyunGoogle"
+                url = uri("https://maven.aliyun.com/repository/google")
+                content {
+                    includeGroupByRegex("com\\.android.*")
+                    includeGroupByRegex("com\\.google.*")
+                    includeGroupByRegex("androidx.*")
+                    excludeGroupByRegex("com\\.google\\.devtools.*")
+                }
+            }
         }
-        google()
-        maven {
-            name = "AliyunCentral"
-            url = uri("https://maven.aliyun.com/repository/central")
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+                excludeGroupByRegex("com\\.google\\.devtools.*")
+            }
+        }
+        if (!isCi) {
+            maven {
+                name = "AliyunCentral"
+                url = uri("https://maven.aliyun.com/repository/central")
+            }
         }
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
