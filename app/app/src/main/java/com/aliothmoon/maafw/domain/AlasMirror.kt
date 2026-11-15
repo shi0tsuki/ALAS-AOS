@@ -24,7 +24,7 @@ enum class AlasMirror(
     ),
     GITHUB(
         seedValue = "github",
-        updateRepo = "https://github.com/LmeSzinc/AzurLaneAutoScript",
+        updateRepo = "https://github.com/shi0tsuki/ALAS-AOS",
         noCdn = true,
         pypiMirror = "https://pypi.org/simple",
     ),

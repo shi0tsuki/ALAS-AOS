@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-**ALAS-AOS**（ALAS 的 AndroidOS 版，2026-09-20 由 MaaAL 更名）：仓库 [github.com/Shinarin/ALAS-AOS](https://github.com/Shinarin/ALAS-AOS)，包名 `io.github.shinarin.alasaos`，最新发布 **v0.1.6**。上游 ALAS 适配钉版 `7d6a415e`（2026-10-08 HEAD，审查见 `docs/upstream-sync-2026-10-12.md`）。
+**ALAS-AOS**（ALAS 的 AndroidOS 版，2026-09-20 由 MaaAL 更名）：仓库 [github.com/Shinarin/ALAS-AOS](https://github.com/Shinarin/ALAS-AOS)，包名 `io.github.shinarin.alasaos`，最新发布 **v0.1.6**。上游 ALAS 适配钉版 `1ed81bac`（upstream master HEAD）。
 
 已交付功能：三 tab（挂机=游戏画面+操作面板 / ALAS WebUI / 设置）、悬浮窗控制面板（调度器状态 + 开始/停止挂机 + 半透明日志板，唯一控制面）、半自动点击与活动剧情（工具类，不入挂机队列）、开屏热更新（CDN pack 通道，git:// 兜底）、i18n（跟随系统/简体中文/English，切换会重建项目）、主题（跟随系统/浅色/深色 + 默认/Semi Design）、日志区（启动器/ALAS 日志查看、两类导出、冷启自动清理）、启动模式（Shizuku / Root）。
 

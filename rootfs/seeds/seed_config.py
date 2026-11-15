@@ -30,7 +30,7 @@ MIRRORS = {
         'PypiMirror': 'https://mirrors.aliyun.com/pypi/simple',
     },
     'github': {
-        'Repository': 'https://github.com/LmeSzinc/AzurLaneAutoScript',
+        'Repository': 'https://github.com/shi0tsuki/ALAS-AOS',
         'PypiMirror': 'https://pypi.org/simple',
     },
 }

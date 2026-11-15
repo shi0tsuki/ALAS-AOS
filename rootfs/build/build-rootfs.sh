@@ -8,7 +8,7 @@
 # Windows 无这些语义；本机只做 `bash -n` 语法检查与 rootfs/ 资产 curated。
 #
 # 环境变量（均可 export 覆盖，冒号后为默认值）：
-#   ALAS_REF        7d6a415e…（钉版 sha，见第 0 节）  ALAS 分支/tag；传 40 位 commit sha 则按 commit 浅 fetch
+#   ALAS_REF        1ed81bac…（钉版 sha，见第 0 节）  ALAS 分支/tag；传 40 位 commit sha 则按 commit 浅 fetch
 #   ALAS_REPO       https://github.com/LmeSzinc/AzurLaneAutoScript.git
 #   ROOTFS_VERSION  0.1.0                           写入 BUILD_MANIFEST.rootfs_version
 #   UBUNTU_BASE     https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz
@@ -21,10 +21,10 @@
 set -euo pipefail
 
 # ---------- 0. 变量、提权、前置检查 ----------
-# 钉版：2026-10-08 上游 master HEAD（39 commit 适配审查零冲突，见 docs/upstream-sync-2026-10-12.md）。
+# 钉版：upstream master HEAD（commit 1ed81bac5f2590b0d987504c9620561cd573776e）。
 # 跟进上游 = 改此默认值 + push 触发 rootfs.yml 重烘。钉版只定烘焙起点；运行时热更新
 # （seeds/alasaos_update.sh）不读本变量，设备照常吃到上游最新。
-ALAS_REF="${ALAS_REF:-7d6a415e3ef5ed049fd7024311c16158fcd2af28}"
+ALAS_REF="${ALAS_REF:-1ed81bac5f2590b0d987504c9620561cd573776e}"
 ALAS_REPO="${ALAS_REPO:-https://github.com/LmeSzinc/AzurLaneAutoScript.git}"
 # 注：GHA runner 在海外，GitHub 原生最快；gitee 同名镜像对匿名克隆要凭证（401→挂凭证提示），勿用。
 # 国内本地复现构建时可 export ALAS_REPO=<可达镜像>；runtime 更新镜像由 deploy.yaml 的 fullcn 配置管，与此无关。

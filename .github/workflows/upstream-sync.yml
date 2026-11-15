@@ -1,0 +1,104 @@
+name: upstream-sync
+
+on:
+  schedule:
+    # 每天 UTC 19:00（北京时间凌晨 03:00）自动同步上游并更新
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Target hot-update branch to push to'
+        required: true
+        default: 'alas-update'
+      upstream_repo:
+        description: 'Upstream ALAS repository'
+        required: true
+        default: 'https://github.com/LmeSzinc/AzurLaneAutoScript.git'
+      upstream_branch:
+        description: 'Upstream branch to sync from'
+        required: true
+        default: 'master'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout ALAS-AOS repo
+        uses: actions/checkout@v4
+        with:
+          path: alas-aos
+
+      - name: Clone upstream ALAS repo
+        run: |
+          UPSTREAM_REPO="${{ inputs.upstream_repo || 'https://github.com/LmeSzinc/AzurLaneAutoScript.git' }}"
+          UPSTREAM_BRANCH="${{ inputs.upstream_branch || 'master' }}"
+          echo "Cloning from $UPSTREAM_REPO ($UPSTREAM_BRANCH)..."
+          git clone --depth 1 --branch "$UPSTREAM_BRANCH" "$UPSTREAM_REPO" upstream-alas
+          cd upstream-alas
+          UPSTREAM_HEAD=$(git rev-parse HEAD)
+          echo "UPSTREAM_HEAD=$UPSTREAM_HEAD" >> $GITHUB_ENV
+          echo "Upstream HEAD is $UPSTREAM_HEAD"
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Apply patches and overlays
+        run: |
+          echo "==> 1. Applying patches..."
+          cp -rf alas-aos/rootfs/patches/module/. upstream-alas/module/
+          cp -rf alas-aos/rootfs/patches/assets/. upstream-alas/assets/
+
+          echo "==> 2. Executing assets_fix.py..."
+          python3 alas-aos/rootfs/patches/assets_fix.py upstream-alas
+
+          echo "==> 3. Applying overlays..."
+          cp -rf alas-aos/rootfs/overlays/. upstream-alas/
+
+          echo "==> 4. Setting up seeds and config..."
+          mkdir -p upstream-alas/seeds upstream-alas/config
+          cp -rf alas-aos/rootfs/seeds/. upstream-alas/seeds/
+          cp -f alas-aos/rootfs/seeds/deploy.yaml upstream-alas/config/deploy.yaml
+
+          echo "==> 5. Cleaning up upstream workflows..."
+          rm -rf upstream-alas/.github
+
+          echo "==> 6. Syntax check for critical components..."
+          python3 -m py_compile \
+            upstream-alas/module/ocr/rpc.py \
+            upstream-alas/wrapper.py \
+            upstream-alas/runner.py
+
+      - name: Commit and push to hot-update branch
+        run: |
+          TARGET_BRANCH="${{ inputs.target_branch || 'alas-update' }}"
+          cd upstream-alas
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git remote remove origin
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+
+          git checkout -B "$TARGET_BRANCH"
+          git add -A
+
+          if git diff-index --quiet HEAD --; then
+            echo "No changes after applying patches."
+          else
+            SHORT_SHA=$(echo "$UPSTREAM_HEAD" | cut -c1-7)
+            git commit -m "chore(sync): sync upstream LmeSzinc@${SHORT_SHA} with ALAS-AOS patches"
+          fi
+
+          echo "Pushing to origin/$TARGET_BRANCH..."
+          git push origin "$TARGET_BRANCH" --force
