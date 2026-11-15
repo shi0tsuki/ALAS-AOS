@@ -7,7 +7,7 @@
 > ⚠️ **兼容性说明**：各家手机渲染方案不一致，极个别场景可能识别失败，可借助 AI 针对自己的机型自行适配。本仓库只做基本可行性测试。
 
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
-[![Release](https://img.shields.io/github/v/release/Shinarin/ALAS-AOS)](https://github.com/Shinarin/ALAS-AOS/releases)
+[![Release](https://img.shields.io/github/v/release/shi0tsuki/ALAS-AOS)](https://github.com/shi0tsuki/ALAS-AOS/releases)
 
 ## ✨ 特性
 
@@ -60,7 +60,7 @@ Shizuku 是开源的特权桥接工具，让普通 App 也能使用系统级能�
 
 ### 第 2 步：安装 ALAS-AOS
 
-1. 到 [Release 页](https://github.com/Shinarin/ALAS-AOS/releases) 下载 `ALAS-AOS-v<版本号>-android-arm64.apk`（约 330MB，运行环境已内置，所以这么大）。
+1. 到 [Release 页](https://github.com/shi0tsuki/ALAS-AOS/releases) 下载 `ALAS-AOS-v<版本号>-android-arm64.apk`（约 330MB，运行环境已内置，所以这么大）。
 2. 安装并打开，按引导完成 **Shizuku 授权**。
 3. 耐心等待首启部署（解压运行环境 + 热更新检查），完成后自动进入挂机页。🎊
 
