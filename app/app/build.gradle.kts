@@ -8,6 +8,18 @@ plugins {
 android {
     namespace = "com.aliothmoon.maafw"
 
+    signingConfigs {
+        getByName("debug") {
+            val fixedKeystore = rootProject.file("debug.keystore")
+            if (fixedKeystore.exists()) {
+                storeFile = fixedKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     sourceSets {
         named("main") {
             // proot 九件套（libproot/libproot-loader/libtalloc/busybox/shim 等，Spike A 钉版产物）；
