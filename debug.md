@@ -1,5 +1,24 @@
 # Debug · 坑点记录
 
+## [2026-11-16] Kotlin runCatching 链式 .also 导致异常逃逸：未内置 rootfs.tar.xz 时状态机误判为“部署失败: rootfs/rootfs.tar.xz”
+
+- **现象**：安装未内置 `rootfs.tar.xz` 的 APK（如早先仅 26.8MB 的 CI Debug 构建），首启不会停在预期的未内置降级状态（`ProvisionState.NotBundled`），而是直接弹出红色错误提示：`部署失败: rootfs/rootfs.tar.xz`。
+- **根本原因**：
+  1. `RootfsProvisioner.kt` 中 `bundledVersion()` 的实现为：
+     ```kotlin
+     private fun bundledVersion(): String? = runCatching {
+         parseVersion(app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() })
+     }.getOrNull().also { version ->
+         if (version != null) app.assets.open(ASSET_ARCHIVE).use { }
+     }
+     ```
+     `runCatching` 仅仅包住了 `ASSET_MANIFEST` 的读取；而 `.also` 处于 `runCatching` 闭包外部！当 assets 中存在 `BUILD_MANIFEST` 但缺少 `rootfs.tar.xz` 时，`.also` 内的 `open(ASSET_ARCHIVE)` 会直接抛出 `FileNotFoundException`。
+  2. 该未被捕获的异常直接逃逸到了 `run()` 外部的通用 `try-catch` 块中，被赋值给 `ProvisionState.Failed(e.message)`（message 即为抛出的文件名 `rootfs/rootfs.tar.xz`），导致状态机未进入 `ProvisionState.NotBundled` 分支。
+  3. CI 流水线 `.github/workflows/app.yml` 此前未配置下载 rootfs artifact 的步骤，打出的 APK 本身就不包含约 300MB 的 rootfs。
+- **解决方案**：
+  1. 将对 `ASSET_ARCHIVE` 存在性的探测一并纳入 `runCatching` 内部保护域，一旦资产有任一缺失均被捕获并安全返回 `null`（即状态机转为 `NotBundled`）。
+  2. 在 GitHub Actions `app.yml` 中新增 `Download rootfs artifact` 步骤，在 `assembleDebug` 之前通过 `gh` 自动从最新的 `rootfs.yml` 成功构建中下载 `rootfs.tar.xz` 和 `BUILD_MANIFEST` 并放入 assets 目录，产出约 300MB+ 完整独立安装包。
+
 ## [2026-10-22] 半自动点击（daemon）"不走图"不是故障：走图从来是游戏内置「自动寻敌」的活，新图没这个按钮就原地罚站
 
 - **现象**：用户报半自动点击在新活动图（轻量化复刻，限时倒计时+追猎迎击机制）上战后舰队原地不动；日志每战后刷 `No enemy searching in map.`，截图 78 秒两帧逐像素相同。

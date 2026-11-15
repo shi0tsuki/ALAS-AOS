@@ -122,10 +122,13 @@ class RootfsProvisioner(
 
     /** 内置包版本；资产缺任一件都视为未内置 */
     private fun bundledVersion(): String? = runCatching {
-        parseVersion(app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() })
-    }.getOrNull().also { version ->
-        if (version != null) app.assets.open(ASSET_ARCHIVE).use { }
-    }
+        val manifest = app.assets.open(ASSET_MANIFEST).bufferedReader().use { it.readText() }
+        val version = parseVersion(manifest)
+        if (version != null) {
+            app.assets.open(ASSET_ARCHIVE).use { }
+        }
+        version
+    }.getOrNull()
 
     private fun readExtractedVersion(): String? = runCatching {
         parseVersion(File(rootDir, MANIFEST_REL).readText())

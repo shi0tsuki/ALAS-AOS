@@ -24,6 +24,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
     defaults:
       run:
         working-directory: app
@@ -48,6 +51,27 @@ jobs:
 
       - name: Unit tests
         run: ./gradlew testDebugUnitTest --console=plain
+
+      - name: Download rootfs artifact
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching latest successful rootfs artifact..."
+          RUN_ID=$(gh run list --workflow=rootfs.yml --status=success --limit 1 --json databaseId --jq '.[0].databaseId')
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "::error::No successful rootfs workflow run found!"
+            exit 1
+          fi
+          echo "Found successful rootfs run: $RUN_ID"
+          mkdir -p .tmp_rootfs
+          gh run download "$RUN_ID" -n rootfs -D .tmp_rootfs
+          mkdir -p app/app/src/main/assets/rootfs
+          find .tmp_rootfs -type f -name "rootfs.tar.xz" -exec mv -f {} app/app/src/main/assets/rootfs/ \;
+          find .tmp_rootfs -type f -name "BUILD_MANIFEST" -exec mv -f {} app/app/src/main/assets/rootfs/ \;
+          rm -rf .tmp_rootfs
+          test -f app/app/src/main/assets/rootfs/rootfs.tar.xz || { echo "::error::rootfs.tar.xz missing after download"; exit 1; }
+          ls -lh app/app/src/main/assets/rootfs/
 
       # 不打 assembleRelease：release 签名 keystore 走 local.properties 绝对路径，CI 上没有
       - name: Assemble debug
