@@ -1,5 +1,16 @@
 # Debug · 坑点记录
 
+## [2026-11-16] 跨网络浅克隆（shallow clone）推送至全新分支报 index-pack failed: did not receive expected object
+
+- **现象**：在 GitHub Actions 流水线 `upstream-sync.yml` 中，使用 `git clone --depth 1` 浅克隆上游 `LmeSzinc/AzurLaneAutoScript`，打好补丁后切换分支并强制推送到目标仓库 `shi0tsuki/ALAS-AOS` 时，报：
+  `remote: fatal: did not receive expected object 65ab61078b0b57aed04b388531736d174ffb5a24`
+  `error: remote unpack failed: index-pack failed`
+  `! [remote rejected] alas-update -> alas-update (failed)`
+- **根本原因**：
+  上游仓库与目标仓库不是同一个 Git 提交历史网络（commit graph）。浅克隆产生的 commit 对象头中记录了上游的 parent sha（`65ab61...`），而目标仓库不存在该 parent 对象。当向目标仓库推送 thin pack 时，目标服务器做 index-pack 校验找不到其引用的基底对象，从而硬拒绝写入。
+- **解决方案**：
+  在打入补丁后，移除上游浅克隆带有的 `.git` 历史，重新 `git init -b alas-update` 构筑完全自包含的独立根提交（root commit）。推送时为纯自包含 tree，无外部未解引用，跨网络 force-push 100% 成功，且生成的手机端热更新分支体积最小最纯净。
+
 ## [2026-11-16] Kotlin runCatching 链式 .also 导致异常逃逸：未内置 rootfs.tar.xz 时状态机误判为“部署失败: rootfs/rootfs.tar.xz”
 
 - **现象**：安装未内置 `rootfs.tar.xz` 的 APK（如早先仅 26.8MB 的 CI Debug 构建），首启不会停在预期的未内置降级状态（`ProvisionState.NotBundled`），而是直接弹出红色错误提示：`部署失败: rootfs/rootfs.tar.xz`。
